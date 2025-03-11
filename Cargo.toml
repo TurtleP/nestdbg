@@ -1,0 +1,21 @@
+[package]
+name = "nestdbg"
+version = "0.2.0"
+edition = "2021"
+
+[dependencies]
+clap = { version = "4.5.18", features = ["derive"] }
+clearscreen = "3.0.0"
+cli-table = { version = "0.4.9", default-features = false }
+dirs = { version = "5.0.1", default-features = false }
+serde = { version = "1.0.215", default-features = false, features = ["derive"] }
+toml = { version = "0.8.19", default-features = false, features = [
+    "display",
+    "parse",
+] }
+
+[profile.release]
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+strip = true
