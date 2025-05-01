@@ -3,71 +3,73 @@ use std::time::Duration;
 
 use crate::{message::Message, terminal::app::Application};
 
-pub async fn handle_popup_input(state: &mut Application, key_event: KeyEvent) -> Message {
-    match key_event.code {
-        KeyCode::Up => {
-            state.selected_connection =
-                (state.selected_connection + state.config.get_connections().len() - 1)
-                    % state.config.get_connections().len();
-        }
-        KeyCode::Down => {
-            state.selected_connection =
-                (state.selected_connection + 1) % state.config.get_connections().len();
-        }
-        KeyCode::Enter => {
-            let id = state.selected_connection;
+impl Application {
+    async fn handle_popup_input(&mut self, key_event: KeyEvent) -> Message {
+        match key_event.code {
+            KeyCode::Up => {
+                self.selected_connection =
+                    (self.selected_connection + self.config.get_connections().len() - 1)
+                        % self.config.get_connections().len();
+            }
+            KeyCode::Down => {
+                self.selected_connection =
+                    (self.selected_connection + 1) % self.config.get_connections().len();
+            }
+            KeyCode::Enter => {
+                let id = self.selected_connection;
 
-            if let Some(connection) = state.config.get_connection(id) {
-                if let Ok(_) = state.network_manager.connect(connection).await {
+                if let Some(connection) = self.config.get_connection(id) {
+                    if let Ok(_) = self.network_manager.connect(connection).await {
+                        return Message::none();
+                    }
                     return Message::none();
                 }
-                return Message::none();
             }
+            KeyCode::Esc => {
+                return Message::show_popup();
+            }
+            _ => {}
         }
-        KeyCode::Esc => {
-            return Message::show_popup();
-        }
-        _ => {}
+        Message::none()
     }
-    Message::none()
-}
 
-pub async fn handle_input(state: &mut Application) -> Message {
-    if event::poll(Duration::from_millis(100)).unwrap() {
-        if let Event::Key(key_event) = event::read().unwrap() {
-            if key_event.kind != KeyEventKind::Press {
-                return Message::none();
-            }
+    pub async fn handle_input(&mut self) -> Message {
+        if event::poll(Duration::from_millis(100)).unwrap() {
+            if let Event::Key(key_event) = event::read().unwrap() {
+                if key_event.kind != KeyEventKind::Press {
+                    return Message::none();
+                }
 
-            if state.show_popup {
-                return handle_popup_input(state, key_event).await;
-            }
+                if self.show_popup {
+                    return self.handle_popup_input(key_event).await;
+                }
 
-            match key_event.code {
-                KeyCode::Char(c) => {
-                    if key_event.modifiers == KeyModifiers::CONTROL {
-                        match c {
-                            'c' => return Message::quit(),
-                            ' ' => return Message::show_popup(),
-                            _ => state.input.push(c),
+                match key_event.code {
+                    KeyCode::Char(c) => {
+                        if key_event.modifiers == KeyModifiers::CONTROL {
+                            match c {
+                                'c' => return Message::quit(),
+                                ' ' => return Message::show_popup(),
+                                _ => self.input.push(c),
+                            }
+                        } else {
+                            self.input.push(c);
                         }
-                    } else {
-                        state.input.push(c);
                     }
-                }
-                KeyCode::Backspace => {
-                    state.input.pop();
-                }
-                KeyCode::Enter => {
-                    if !state.input.is_empty() {
-                        let command = state.input.clone();
-                        state.input.clear();
-                        return Message::send_input(command);
+                    KeyCode::Backspace => {
+                        self.input.pop();
                     }
+                    KeyCode::Enter => {
+                        if !self.input.is_empty() {
+                            let command = self.input.clone();
+                            self.input.clear();
+                            return Message::send_input(command);
+                        }
+                    }
+                    _ => {}
                 }
-                _ => {}
             }
         }
+        Message::none()
     }
-    Message::none()
 }

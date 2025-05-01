@@ -7,7 +7,6 @@ pub struct Application {
     pub terminal: DefaultTerminal,
     pub input: String,
     pub log: Vec<String>,
-    pub globals: Vec<String>,
     pub show_popup: bool,
     pub config: ConnectionConfig,
 
@@ -27,7 +26,7 @@ impl Application {
             terminal: ratatui::init(),
             input: String::new(),
             log: Vec::new(),
-            globals: Vec::new(),
+
             show_popup: false,
 
             config: load_config(),

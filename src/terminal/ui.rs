@@ -1,6 +1,5 @@
 use std::io::Result;
 
-use ratatui::backend::Backend;
 use ratatui::layout::Rect;
 use ratatui::style::{Color, Style};
 use ratatui::widgets::Paragraph;
@@ -8,13 +7,13 @@ use ratatui::widgets::Paragraph;
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout},
     widgets::{Block, Borders, Clear},
-    Terminal,
 };
 
 use crate::config::Connection;
 use crate::terminal::app::Application;
+use crate::terminal::popup::Popup;
 
-fn popup_area_with_height(area: Rect, percent_x: u16, height: u16) -> Rect {
+fn create_popup(area: Rect, percent_x: u16, height: u16) -> Rect {
     let vertical_margin = area.height.saturating_sub(height) / 2;
 
     let vertical = Layout::default()
@@ -44,7 +43,7 @@ fn render_popup(
     selection: usize,
     connections: &[Connection],
 ) {
-    let popup_area = popup_area_with_height(area, 50, 2 + connections.len() as u16);
+    let popup_area = create_popup(area, 50, 2 + connections.len() as u16);
 
     let outer_block = Block::default()
         .title("Connections")
@@ -87,46 +86,39 @@ fn render_popup(
     }
 }
 
+const COMMANDS: [&str; 3] = [
+    "Ctrl + C: Quit",
+    "Ctrl + Space: Show Connections",
+    "Enter: Connect to Selected",
+];
+
 impl Application {
     pub fn draw(&mut self) -> Result<()> {
         self.terminal.draw(|frame| {
-            let chunks = Layout::default()
+            let top_chunks = Layout::default()
                 .direction(Direction::Vertical)
                 .margin(0)
-                .constraints([
-                    Constraint::Length(1),
-                    Constraint::Min(1),
-                    Constraint::Length(1),
-                ])
+                .constraints([Constraint::Length(1), Constraint::Min(1)])
                 .split(frame.area());
 
-            let top_chunks = Layout::default()
-                .direction(Direction::Horizontal)
-                .constraints([Constraint::Percentage(70), Constraint::Percentage(30)])
-                .split(chunks[1]);
-
-            let status_line = format!("[{}]", &mut self.network_manager.get_address());
+            /* status line  */
+            let status_line = format!("[{}]", self.network_manager.get_address());
             let status_bar = Paragraph::new(status_line).centered();
-            frame.render_widget(status_bar, chunks[0]);
+            frame.render_widget(status_bar, top_chunks[0]);
 
-            let log_block = Block::default().borders(Borders::ALL).title("Log");
-            frame.render_widget(log_block, top_chunks[0]);
-
-            let globals = Paragraph::new("")
-                .block(Block::default().borders(Borders::ALL).title("Lua Globals"));
-            frame.render_widget(globals, top_chunks[1]);
-
-            let input = format!("~> {}", self.input);
-            let input_box = Paragraph::new(input);
-            frame.render_widget(input_box, chunks[2]);
+            /* logs from the console */
+            let log_text = self.log.join("\n");
+            let log_paragraph = Paragraph::new(log_text).block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title("Log")
+                    .title_alignment(Alignment::Center),
+            );
+            frame.render_widget(log_paragraph, top_chunks[1]);
 
             if self.show_popup {
-                render_popup(
-                    frame,
-                    frame.area(),
-                    self.selected_connection,
-                    &self.config.get_connections(),
-                );
+                let connections = self.config.get_connections();
+                render_popup(frame, frame.area(), self.selected_connection, connections);
             }
         })?;
 

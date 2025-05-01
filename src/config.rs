@@ -56,7 +56,7 @@ pub fn load_config() -> ConnectionConfig {
 
 impl ConnectionConfig {
     pub fn get_connections(&self) -> &[Connection] {
-        &self.connections
+        self.connections.as_slice()
     }
 
     pub fn get_connection(&self, index: usize) -> Option<&Connection> {
