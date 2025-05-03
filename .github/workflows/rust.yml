@@ -10,11 +10,36 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  build:
 
-    runs-on: ubuntu-latest
+    linux:
+      runs-on: ubuntu-latest
+      steps:
+      - uses: actions/checkout@v4
+      - name: Build
+        run: cargo build --verbose
 
-    steps:
-    - uses: actions/checkout@v4
-    - name: Build
-      run: cargo build --verbose
+      - uses: actions/upload-artifact@v4
+        with:
+          path: target/release/nestdbg
+
+    windows:
+      runs-on: windows-latest
+      steps:
+        - uses: actions/checkout@v4
+        - name: Build
+          run: cargo build --verbose
+        
+        - uses: actions/upload-artifact@v4
+          with:
+            path: target/release/nestdbg.exe
+
+    macOS:
+      runs-on: macos-latest
+      steps:
+        - uses: actions/checkout@v4
+        - name: Build
+          run: cargo build --verbose
+
+        - uses: actions/upload-artifact@v4
+          with:
+            path: target/release/nestdbg
