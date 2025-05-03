@@ -1,175 +1,129 @@
+use directories::ProjectDirs;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use tabled::settings::Style;
+use tabled::{Table, Tabled};
+
+use std::collections::BTreeMap;
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::io::{Error, ErrorKind, Result};
+use std::net::Ipv4Addr;
+use std::path::PathBuf;
 
-use cli_table::{format::Justify, print_stdout, Cell, Style, Table};
-
-#[derive(Serialize, Deserialize, Debug, Default, PartialEq)]
-pub struct NiceNames {
-    pub mappings: HashMap<String, String>,
+#[derive(Debug, Serialize, Deserialize, Default)]
+pub struct ConnectionConfig {
+    pub connections: BTreeMap<String, Ipv4Addr>,
 }
 
-const CONFIG_FILE: &str = "config.toml";
-
-fn get_filepath() -> Result<PathBuf, std::io::Error> {
-    if let Some(directory) = dirs::config_dir() {
-        let config_path = directory.join(std::env!("CARGO_PKG_NAME"));
-
-        if !config_path.exists() {
-            std::fs::create_dir(&config_path)?;
-        }
-
-        return Ok(config_path.join(CONFIG_FILE));
-    }
-    Err(std::io::Error::new(
-        std::io::ErrorKind::NotFound,
-        "Directory does not exist",
-    ))
+#[derive(Tabled)]
+struct ConnectionRow {
+    name: String,
+    address: Ipv4Addr,
 }
 
-impl NiceNames {
-    /// Loads the mappings from the configuration file.
-    ///
-    /// If the file exists and contains valid TOML, the mappings are loaded into the `NiceNames` struct.
-    /// If the file does not exist or the content is invalid, it returns a default `NiceNames` instance with empty mappings.
-    ///
-    /// ### Errors
-    /// Returns an `std::io::Error` if the configuration directory cannot be accessed or created.
-    pub fn load() -> Result<Self, std::io::Error> {
-        let path = get_filepath()?;
-        let mut content: String = String::new();
+const CONFIG_FILE_NAME: &str = "connections.toml";
 
-        if Path::new(&path).exists() {
-            content = fs::read_to_string(&path)?;
+impl ConnectionConfig {
+    /// Load the connection configuration from the file system.
+    /// If the file does not exist or is invalid, return a default configuration.
+    /// The connections are sorted by name after loading.
+    pub fn load() -> Self {
+        let path = match Self::get_filepath() {
+            Ok(path) => path,
+            Err(_) => return ConnectionConfig::default(),
+        };
+
+        if !path.exists() {
+            return ConnectionConfig::default();
         }
 
-        match toml::from_str(&content) {
-            Ok(value) => Ok(value),
-            Err(_) => Ok(NiceNames::default()),
+        if let Ok(content) = fs::read_to_string(path) {
+            return toml::from_str::<ConnectionConfig>(&content).unwrap_or_default();
+        }
+        ConnectionConfig::default()
+    }
+
+    /// Get the file path for the connection configuration file.
+    /// This will create the directory if it does not exist.
+    pub fn get_filepath() -> Result<PathBuf> {
+        match ProjectDirs::from("com", "lovebrew", "nestdbg") {
+            Some(proj_dirs) => {
+                let config_dir = proj_dirs.config_dir();
+                fs::create_dir_all(config_dir)?;
+                Ok(config_dir.join(CONFIG_FILE_NAME))
+            }
+            None => Err(Error::new(
+                ErrorKind::NotFound,
+                "Could not find project directories",
+            )),
         }
     }
 
-    /// Saves the current mappings to the configuration file in TOML format.
-    ///
-    /// ### Errors
-    /// Returns an `std::io::Error` if the file cannot be written to or if serialization fails.
-    pub fn save(&self) -> Result<(), std::io::Error> {
-        let path = get_filepath()?;
-
-        let toml = toml::to_string_pretty(self).map_err(|err| {
-            eprintln!("Failed to serialize config: {}", err);
-            std::io::Error::new(std::io::ErrorKind::Other, "Failed to serialize config")
-        })?;
-
-        fs::write(path, toml)
-    }
-
-    /// Resolves a name into its corresponding IPv4 address.
-    ///
-    /// ### Arguments
-    /// * `name` - A string slice representing the name to resolve.
-    ///
-    /// ### Returns
-    /// Returns `Some<String>` with the IPv4 address if the name exists in the mappings,
-    /// or `None` if the name is not found.
-    pub fn resolve_name(&self, name: &str) -> Option<String> {
-        self.mappings.get(name).cloned()
-    }
-
-    /// Adds a new mapping between a name and an IPv4 address.
-    ///
-    /// ### Arguments
-    /// * `name` - An optional string slice representing the name to add or update.
-    /// * `address` - A string slice representing the IPv4 address to associate with the name.
-    ///
-    /// If `name` is `None`, the mapping is ignored.
-    ///
-    /// ### Errors
-    /// Returns an `std::io::Error` if saving the updated mappings to the file fails.
-    pub fn add_name(&mut self, name: Option<&str>, address: &str) -> Result<(), std::io::Error> {
-        if let Some(value) = name {
-            self.mappings
-                .insert(String::from(value), String::from(address));
-        }
-        Ok(())
-    }
-
-    /// Prints all mappings in a formatted, human-readable table.
-    ///
-    /// If no mappings exist, prints "No connections found."
-    pub fn list_names(&self) {
-        if self.mappings.is_empty() {
-            println!("No connections found.");
-            return;
+    /// List all connections in a table format.
+    /// If no connections are found, it will print a message indicating that.
+    pub fn list_connections(&self) {
+        if self.connections.is_empty() {
+            return println!("No connections found.");
         }
 
-        let rows: Vec<_> = self
-            .mappings
+        let collection: Vec<ConnectionRow> = self
+            .connections
             .iter()
-            .map(|(name, address)| {
-                vec![
-                    name.cell().justify(Justify::Left),
-                    address.cell().justify(Justify::Left),
-                ]
+            .map(|(name, &address)| ConnectionRow {
+                name: name.clone(),
+                address,
             })
             .collect();
 
-        let table = rows
-            .table()
-            .title(vec![
-                "Name".cell().bold(true),
-                "IPv4 Address".cell().bold(true),
-            ])
-            .border(cli_table::format::Border::builder().build());
+        let mut table = Table::new(collection);
+        table.with(Style::markdown());
 
-        print_stdout(table).unwrap();
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use crate::NiceNames;
-
-    #[test]
-    fn test_resolve_target_nice_name() {
-        let mut names = NiceNames::default();
-        names.add_name(Some("ctr"), "192.168.42.0").unwrap();
-
-        let resolved = names.resolve_name("ctr");
-        assert_eq!(resolved.unwrap(), "192.168.42.0");
+        println!("{table}");
     }
 
-    #[test]
-    fn test_none_name() {
-        let mut names = NiceNames::default();
-        names.add_name(None, "192.168.42.0").unwrap();
+    /// Resolve a target by name or IP address.
+    pub fn resolve_target(&self, target: impl ToString) -> Option<(Ipv4Addr, u16)> {
+        let connection = self
+            .connections
+            .iter()
+            .find(|(name, _)| name.to_string() == target.to_string());
 
-        let resolved = names.resolve_name("");
-        assert_eq!(resolved, None);
+        /* grab the Ipv4Addr from Connection */
+        if let Some(data) = connection {
+            return Some((*data.1, 8000));
+        }
 
-        let empty_names = NiceNames::default();
-        assert_eq!(empty_names, names);
+        /* parse the address from the string */
+        Some((target.to_string().parse().ok()?, 8000))
     }
 
-    #[test]
-    fn test_non_existent_name() {
-        let names = NiceNames::default();
-
-        let resolved = names.resolve_name("newlima3dsxl");
-        assert_eq!(resolved, None);
+    /// Add a new connection to the configuration.
+    pub fn add_connection(&mut self, name: impl ToString, address: Ipv4Addr) -> Result<()> {
+        self.connections.insert(name.to_string(), address);
+        Ok(())
     }
 
-    #[test]
-    fn test_updating_name() {
-        let mut names = NiceNames::default();
+    /// Remove a connection by name.
+    /// Returns `Ok(true)` if the connection was found and removed, `Ok(false)` if not found.
+    pub fn remove_connection(&mut self, filter: &str) -> Result<bool> {
+        if self.connections.iter().any(|(name, _)| filter == name) {
+            self.connections.remove(filter);
+            Ok(true)
+        } else {
+            Ok(false)
+        }
+    }
 
-        let address = "192.168.30.1";
+    /// Save the current configuration to the file system.
+    pub fn save(&self) -> Result<()> {
+        let path = Self::get_filepath()?;
 
-        names.add_name(Some("desktop"), &address).unwrap();
-        names.add_name(Some("desktop"), "192.168.69.0").unwrap();
+        if !path.exists() {
+            fs::create_dir_all(path.parent().unwrap())?;
+        }
 
-        let resolved = names.resolve_name("desktop");
-        assert_eq!(resolved.unwrap(), "192.168.69.0");
+        match toml::to_string_pretty(self) {
+            Ok(content) => fs::write(path, content),
+            Err(e) => Err(Error::new(ErrorKind::InvalidData, e)),
+        }
     }
 }

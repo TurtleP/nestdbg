@@ -1,97 +1,76 @@
-use std::fs::File;
-use std::io::{Read, Write};
-use std::net::{Ipv4Addr, TcpStream};
-use std::path::PathBuf;
-
 use clap::{Error, Parser};
 
-use crate::config::NiceNames;
+use std::{net::Ipv4Addr, path::PathBuf};
+
+mod commands;
 mod config;
+mod output_writer;
+mod socket;
 
-#[derive(Parser, Debug)]
-#[command(version, about, arg_required_else_help = true)]
-struct Args {
-    #[arg(short, long, help = "IP address or name of the target")]
-    target: Option<String>,
+use commands::{Cli, Command};
+use config::ConnectionConfig;
+use output_writer::OutputWriter;
+use socket::Socket;
 
-    #[arg(short, long, help = "Output file name")]
-    filename: Option<PathBuf>,
+fn connect_to_target(address: (Ipv4Addr, u16), file: Option<PathBuf>) -> Result<(), Error> {
+    println!("Connecting to target at {}...", address.0);
+    let mut socket = Socket::new(address)?;
 
-    #[arg(short, long, help = "Optional nice name to save or update")]
-    name: Option<String>,
+    clearscreen::clear().expect("Failed to clear the screen.");
 
-    #[arg(short, long, help = "List all connections")]
-    list_connections: bool,
-}
+    let mut file = OutputWriter::new(file)?;
 
-fn is_ipv4(address: &str) -> bool {
-    address.parse::<Ipv4Addr>().is_ok()
-}
-
-fn main() -> Result<(), Error> {
-    let args = Args::parse();
-    let mut nice_names = NiceNames::load()?;
-
-    if args.list_connections {
-        nice_names.list_names();
-        return Ok(());
-    }
-
-    let mut address: String = String::new();
-
-    if let Some(target) = args.target {
-        address = match nice_names.resolve_name(&target) {
-            Some(address) => address,
-            None => {
-                // Check if the target is a valid IPv4 address before adding it
-                if !is_ipv4(&target) {
-                    eprintln!("Invalid IPv4 address: {}.", target);
-                    return Ok(()); // Return an error here if needed
-                }
-
-                // Add the name and address and save it
-                nice_names.add_name(args.name.as_deref(), &target)?;
-                nice_names.save()?;
-                target
-            }
-        };
-    }
-
-    if !is_ipv4(&address) {
-        return Ok(());
-    }
-
-    let connection = (address, 8000);
-    println!("Connecting to: {:?}.", connection);
-
-    if let Ok(mut socket) = TcpStream::connect(connection) {
-        clearscreen::clear().expect("Failed to clear screen.");
-        let mut buffer = [0; 0x1000];
-
-        let mut file: Option<File> = None;
-        if let Some(filename) = args.filename {
-            file = Some(File::create(filename)?);
-        }
-
-        loop {
-            if let Ok(bytes_read) = socket.read(&mut buffer) {
-                if bytes_read == 0 {
+    loop {
+        match socket.read() {
+            Ok(data_read) => {
+                if data_read.is_empty() {
                     break;
                 }
 
-                let bytes = &buffer[..bytes_read];
-
-                match file {
-                    Some(ref mut output) => output.write(bytes)?,
-                    None => std::io::stdout().write(bytes)?,
-                };
-            } else {
-                eprintln!("Failed to read from the socket.");
+                file.write(data_read)?;
+            }
+            Err(e) => {
+                eprintln!("Failed to read from the socket: {}", e);
                 break;
             }
         }
-    } else {
-        eprintln!("Failed to connect to the target.");
+    }
+
+    Ok(())
+}
+
+fn main() -> Result<(), Error> {
+    let mut config = ConnectionConfig::load();
+
+    let args = Cli::parse();
+
+    match args.command {
+        Command::Add { name, address } => {
+            config.add_connection(&name, address)?;
+            config.save()?;
+            println!("Connection '{}' added for target '{}'.", name, address);
+        }
+        Command::Remove { name } => {
+            if config.remove_connection(&name)? {
+                config.save()?;
+                println!("Connection '{}' removed.", name);
+            } else {
+                eprintln!("No connection found with the name '{}'.", name);
+            }
+        }
+        Command::OpenConfig => {
+            let _ = opener::reveal(&ConnectionConfig::get_filepath()?);
+        }
+        Command::List => config.list_connections(),
+        Command::Connect { target, file } => {
+            if let Some(address) = config.resolve_target(&target) {
+                if connect_to_target(address, file).is_err() {
+                    eprintln!("Failed to connect to the target.");
+                }
+            } else {
+                eprintln!("No connection found for target '{}'.", target);
+            }
+        }
     }
 
     Ok(())
