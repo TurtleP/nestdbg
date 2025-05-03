@@ -47,12 +47,10 @@ fn main() -> Result<(), Error> {
     match args.command {
         Command::Add { name, address } => {
             config.add_connection(&name, address)?;
-            config.save()?;
             println!("Connection '{}' added for target '{}'.", name, address);
         }
         Command::Remove { name } => {
             if config.remove_connection(&name)? {
-                config.save()?;
                 println!("Connection '{}' removed.", name);
             } else {
                 eprintln!("No connection found with the name '{}'.", name);

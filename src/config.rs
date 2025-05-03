@@ -99,7 +99,7 @@ impl ConnectionConfig {
     /// Add a new connection to the configuration.
     pub fn add_connection(&mut self, name: impl ToString, address: Ipv4Addr) -> Result<()> {
         self.connections.insert(name.to_string(), address);
-        Ok(())
+        self.save()
     }
 
     /// Remove a connection by name.
@@ -107,6 +107,7 @@ impl ConnectionConfig {
     pub fn remove_connection(&mut self, filter: &str) -> Result<bool> {
         if self.connections.iter().any(|(name, _)| filter == name) {
             self.connections.remove(filter);
+            self.save()?;
             Ok(true)
         } else {
             Ok(false)
