@@ -2,6 +2,14 @@
 name = "nestdbg"
 version = "0.3.0"
 edition = "2024"
+authors = ["TurtleP"]
+license = "MIT"
+description = "A simple remote debugging tool for LÖVE Potion games."
+readme = "README.md"
+homepage = "https://github.com/TurtleP/nestdbg"
+repository = "https://github.com/TurtleP/nestdbg"
+keywords = ["cli", "debug"]
+categories = ["command-line-utilities"]
 
 [dependencies]
 clap = { version = "4.5.18", features = ["derive"] }
