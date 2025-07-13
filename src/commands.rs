@@ -41,4 +41,10 @@ pub enum Command {
         #[arg(long, help = "File to write logging output to")]
         file: Option<PathBuf>,
     },
+    Addr2line {
+        #[arg(help = "Path to the debug binary")]
+        filepath: PathBuf,
+        #[arg(help = "Exception addresses to resolve")]
+        addresses: Vec<String>,
+    },
 }

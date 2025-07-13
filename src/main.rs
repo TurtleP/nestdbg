@@ -2,6 +2,7 @@ use clap::{Error, Parser};
 
 use std::{net::Ipv4Addr, path::PathBuf};
 
+mod addr2line;
 mod commands;
 mod config;
 mod output_writer;
@@ -68,6 +69,12 @@ fn main() -> Result<(), Error> {
             } else {
                 eprintln!("No connection found for target '{}'.", target);
             }
+        }
+        Command::Addr2line {
+            filepath,
+            addresses,
+        } => {
+            addr2line::run(&filepath, addresses);
         }
     }
 
