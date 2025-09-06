@@ -16,6 +16,7 @@ Commands:
   open-config  Open the configuration file in the file browser
   list         List all connections
   connect      Connect to a target using an existing connection or IP address
+  addr2line    Resolve exception addresses using a debug binary
   help         Print this message or the help of the given subcommand(s)
 
 Options:
@@ -25,7 +26,7 @@ Options:
 
 ## Installation
 
-> [!IMPORTANT] 
+> [!IMPORTANT]
 > The project is built using the rust programming language. Ensure that it is installed before trying to build the project.
 
 
@@ -46,7 +47,7 @@ cargo build --release
 cargo install --path .
 ```
 
-Alternatively, install the tool through crates.io: 
+Alternatively, install the tool through crates.io:
 ```bash
 cargo install nestdbg
 ```
